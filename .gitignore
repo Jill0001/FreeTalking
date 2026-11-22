@@ -1,0 +1,14 @@
+/.claude
+/build
+/build-local
+/dist
+/.env.release.local
+
+/tmp/
+.DS_Store
+xcuserdata/
+.env
+.env.*
+*.p12
+*.p8
+*.mobileprovision

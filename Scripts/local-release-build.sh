@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Builds FreeTalking in Release, signs with Developer ID, zips, notarizes,
+# and staples.
+#
+# Usage:
+#   ./Scripts/local-release-build.sh <version> [--skip-notarize]
+#
+# Requires:
+#   - Developer ID Application cert in the login keychain
+#   - A stored notarytool profile (see README: xcrun notarytool store-credentials)
+#
+# Override defaults via environment or .env.release.local:
+#   APPLE_SIGNING_IDENTITY  Developer ID identity name (auto-detected if unset)
+#   APPLE_TEAM_ID           Developer ID team ID (auto-detected from identity)
+#   NOTARY_PROFILE          notarytool keychain profile name (default: ramblr-notary)
+
+RELEASE_ENV_FILE="${RELEASE_ENV_FILE:-.env.release.local}"
+if [ -f "${RELEASE_ENV_FILE}" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "${RELEASE_ENV_FILE}"
+  set +a
+fi
+
+SCHEME="Ramblr"
+APP_NAME="FreeTalking"
+CONFIGURATION="Release"
+DERIVED_DATA_PATH="build-local"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/${APP_NAME}.app"
+ENTITLEMENTS_PATH="Scripts/distribution-entitlements.plist"
+SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+DEVELOPMENT_TEAM="${APPLE_TEAM_ID:-}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-ramblr-notary}"
+SKIP_NOTARIZE="false"
+VERSION=""
+
+cd "$(dirname "$0")/.."
+
+usage() {
+  cat <<EOF
+Usage: ./Scripts/local-release-build.sh <version> [--skip-notarize]
+
+<version>         e.g. 1.2.3 or v1.2.3 (used to name the output zip)
+--skip-notarize   Sign only; useful for iterating before spending a notarization round-trip
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-notarize) SKIP_NOTARIZE="true"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) echo "Unknown option: $1" >&2; usage; exit 1 ;;
+    *)
+      if [ -z "${VERSION}" ]; then
+        VERSION="$1"
+        shift
+      else
+        echo "Unexpected argument: $1" >&2
+        usage
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+if [ -z "${VERSION}" ]; then
+  echo "A version is required." >&2
+  usage
+  exit 1
+fi
+
+VERSION="${VERSION#v}"
+ZIP_PATH="dist/FreeTalking-${VERSION}-macos.zip"
+
+if [ -z "${SIGNING_IDENTITY}" ]; then
+  SIGNING_IDENTITY="$(security find-identity -v -p codesigning \
+    | awk '!/CSSMERR/' \
+    | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' \
+    | head -n 1)"
+fi
+
+if [ -z "${SIGNING_IDENTITY}" ]; then
+  echo "No Developer ID Application identity found in the keychain." >&2
+  echo "Add one via Xcode → Settings → Accounts → Manage Certificates." >&2
+  exit 1
+fi
+
+if [ -z "${DEVELOPMENT_TEAM}" ]; then
+  DEVELOPMENT_TEAM="$(sed -n 's/.*(\([A-Z0-9]\{10\}\)).*/\1/p' <<<"${SIGNING_IDENTITY}")"
+fi
+
+echo "Signing identity: ${SIGNING_IDENTITY}"
+echo "Team:             ${DEVELOPMENT_TEAM}"
+
+remove_signature_if_present() {
+  local target="$1"
+  if codesign --display --verbose=1 "${target}" >/dev/null 2>&1; then
+    codesign --remove-signature "${target}"
+  fi
+}
+
+sign_with_runtime() {
+  local target="$1"
+  remove_signature_if_present "${target}"
+  codesign --force --options runtime --timestamp --sign "${SIGNING_IDENTITY}" "${target}"
+}
+
+sign_bundled_media_adapter() {
+  local app_bundle_path="$1"
+  local adapter_path="${app_bundle_path}/Contents/Resources/MediaRemoteAdapter.dylib"
+
+  if [ ! -f "${adapter_path}" ]; then
+    echo "MediaRemoteAdapter.dylib not found inside the app bundle." >&2
+    echo "Install media-control before building FreeTalking: brew install media-control" >&2
+    exit 1
+  fi
+
+  sign_with_runtime "${adapter_path}"
+}
+
+mkdir -p dist
+rm -f "${ZIP_PATH}"
+
+# Stamp the requested version into the project before building.
+echo "Stamping project version ${VERSION}…"
+./Scripts/bump-project-version.sh "${VERSION}"
+
+echo "Building ${APP_NAME} (${CONFIGURATION})…"
+BUILD_CMD=(xcodebuild
+  -scheme "${SCHEME}"
+  -configuration "${CONFIGURATION}"
+  -derivedDataPath "${DERIVED_DATA_PATH}"
+  CODE_SIGN_STYLE=Manual
+  CODE_SIGNING_REQUIRED=NO
+  CODE_SIGNING_ALLOWED=NO
+  build)
+
+if command -v xcbeautify >/dev/null 2>&1; then
+  set -o pipefail
+  "${BUILD_CMD[@]}" | xcbeautify
+else
+  "${BUILD_CMD[@]}"
+fi
+
+if [ ! -d "${APP_PATH}" ]; then
+  echo "Built app not found at ${APP_PATH}" >&2
+  exit 1
+fi
+
+echo "Signing distribution artifacts…"
+sign_bundled_media_adapter "${APP_PATH}"
+
+APP_EXECUTABLE_PATH="${APP_PATH}/Contents/MacOS/${APP_NAME}"
+remove_signature_if_present "${APP_EXECUTABLE_PATH}"
+codesign --force --options runtime --timestamp \
+  --entitlements "${ENTITLEMENTS_PATH}" \
+  --sign "${SIGNING_IDENTITY}" "${APP_EXECUTABLE_PATH}"
+
+remove_signature_if_present "${APP_PATH}"
+codesign --force --options runtime --timestamp \
+  --entitlements "${ENTITLEMENTS_PATH}" \
+  --sign "${SIGNING_IDENTITY}" "${APP_PATH}"
+
+codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
+
+echo "Zipping to ${ZIP_PATH}…"
+ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
+
+if [ "${SKIP_NOTARIZE}" = "true" ]; then
+  echo "Skipping notarization (per --skip-notarize)."
+  echo "Built: ${ZIP_PATH}"
+  exit 0
+fi
+
+echo "Submitting to notarytool (profile: ${NOTARY_PROFILE})…"
+SUBMISSION_JSON="$(xcrun notarytool submit "${ZIP_PATH}" \
+  --keychain-profile "${NOTARY_PROFILE}" \
+  --wait \
+  --output-format json)"
+printf '%s\n' "${SUBMISSION_JSON}"
+
+SUBMISSION_ID="$(printf '%s' "${SUBMISSION_JSON}" | plutil -extract id raw - 2>/dev/null || true)"
+SUBMISSION_STATUS="$(printf '%s' "${SUBMISSION_JSON}" | plutil -extract status raw - 2>/dev/null || true)"
+
+if [ "${SUBMISSION_STATUS}" != "Accepted" ]; then
+  echo "Notarization failed with status: ${SUBMISSION_STATUS:-unknown}" >&2
+  if [ -n "${SUBMISSION_ID}" ]; then
+    echo "Fetching notary log for ${SUBMISSION_ID}…" >&2
+    xcrun notarytool log "${SUBMISSION_ID}" \
+      --keychain-profile "${NOTARY_PROFILE}" \
+      --output-format json >&2 || true
+  fi
+  rm -f "${ZIP_PATH}"
+  exit 1
+fi
+
+# Stapling embeds the notarization ticket, then the app is re-zipped so the
+# downloadable artifact carries the ticket.
+echo "Stapling ticket to app bundle…"
+xcrun stapler staple "${APP_PATH}"
+xcrun stapler validate "${APP_PATH}"
+
+echo "Re-zipping stapled bundle…"
+rm -f "${ZIP_PATH}"
+ditto -c -k --sequesterRsrc --keepParent "${APP_PATH}" "${ZIP_PATH}"
+
+echo
+echo "Done. Artifact ready for local distribution:"
+echo "  ${ZIP_PATH}"
