@@ -1,13 +1,26 @@
-# FreeTalking 源码与安装包
+<p align="center"><img src="Ramblr/Assets.xcassets/AppIcon.appiconset/FreeTalking-128@2x.png" width="96" height="96" alt="FreeTalking"></p>
+<h1 align="center">FreeTalking</h1>
+<p align="center">在 Mac 菜单栏开启听写，边说边看文字。</p>
+<p align="center"><a href="https://github.com/Jill0001/FreeTalking/releases/latest"><strong>下载 Apple 芯片版</strong></a> · <a href="README.md">English</a></p>
 
-FreeTalking 是一个 macOS 菜单栏听写工具。你可以边说边看转写，再将最终文字复制或粘贴到编辑器里。
+按一下**右侧 Command** 开始说话，转写文字会逐步出现在光标附近的浮窗里。长句自动换行，前文保留下来。再按一下结束，整段文字就可以复制，也可以自动粘贴到刚才的输入框。
+
+<img src="docs/media/live-dictation.gif" width="520" alt="中文切换到英文，再切回中文，浮窗随文字增加自动换行。">
+
+这段 GIF 回放了一次中英混说听写，用合成语音作为输入，按实际收到转写结果的时间展示。我们平时用得最多的是普通话、英语和中英混说，日常听写的识别效果不错。其他语言实测较少，目前应用会向模型提供中文和英文两种语言提示。
 
 ## 第一次使用
 
-1. 在 Apple 芯片、macOS 15.2 或更高版本的 Mac 上打开随包 DMG，把 FreeTalking 拖入「应用程序」，然后从那里启动。按系统提示允许使用麦克风。
+从上方下载 DMG，适用于 **Apple 芯片、macOS 15.2 或更高版本**。把 FreeTalking 拖进「应用程序」后打开。
+
+**如果首次启动提示「无法验证开发者」**：当前版本使用本地签名，未经 Apple 公证。首次尝试打开后，如果你信任下载的副本，可前往「系统设置 → 隐私与安全性」，找到 FreeTalking，点击「仍要打开」并确认。[Apple 图文说明](https://support.apple.com/en-us/102445)
+
+1. 首次录音时，按系统提示允许使用麦克风。
 2. 点击菜单栏麦克风，再点齿轮 → **Dictation**。输入自己的 OpenAI API Key，点 **Save Key**。可在同一页测试连接、选择麦克风、设置光标附近文本作为识别参考。[获取 OpenAI API Key](https://platform.openai.com/api-keys)
 3. **Output** 可以开启自动粘贴、保存 TXT 或录音时暂停媒体。**Shortcuts** 可以修改快捷键。
 4. 菜单栏展示最近 10 条听写。点击文字可复制；新录音旁的波形与文档按钮可在 Finder 中显示仍存在的 WAV 和已保存的 TXT。
+
+<img src="docs/media/recent-dictations.png" width="340" alt="最近听写菜单示例，每段文字右侧都有复制按钮。">
 
 ## 录第一段话
 
@@ -20,8 +33,8 @@ FreeTalking 是一个 macOS 菜单栏听写工具。你可以边说边看转写�
 
 ## 阅读与构建源码
 
-- 在 Windows 或 Linux 上解压 ZIP，就能用编辑器阅读全部源码。随附的 DMG 和 Xcode 工程用于 macOS。开发其他平台的版本时，可沿用下文的实时协议流程，并替换桌面系统接口。
-- 在 Mac 上从源码构建，先安装完整 Xcode 和 Homebrew 的 `media-control`（`brew install media-control`），再打开 [Xcode 工程](Ramblr.xcodeproj) 运行 Ramblr scheme。工程名沿用 Ramblr，产物名为 FreeTalking。也可以在仓库根目录下执行 `bash Scripts/local-dmg-build.sh` 打包。原项目说明和许可证位于 [README](README.md) 和 [LICENSE](LICENSE.txt)。
+- 在 Windows 或 Linux 上解压 ZIP，就能用编辑器阅读全部源码。Release 中的 DMG 和 Xcode 工程用于 macOS。开发其他平台的版本时，可沿用下文的实时协议流程，并替换桌面系统接口。
+- 在 Mac 上从源码构建，先安装完整 Xcode 和 Homebrew 的 `media-control`（`brew install media-control`），再打开 [Xcode 工程](Ramblr.xcodeproj) 运行 Ramblr scheme。工程名沿用 Ramblr，产物名为 FreeTalking。也可以在仓库根目录下执行 `bash Scripts/local-dmg-build.sh` 打包。FreeTalking 基于 [Ramblr](https://github.com/nfarina/ramblr) 开发，保留了原项目的 [MIT 许可证](LICENSE.txt)。
 
 ## 沿一次听写读源码
 
@@ -36,4 +49,4 @@ FreeTalking 是一个 macOS 菜单栏听写工具。你可以边说边看转写�
 
 最容易单独复现的是实时转写流程：保持单条连接、按顺序发送 PCM16、增量更新预览、停录后提交尾包、使用服务端最终文本。录音设备接入、全局快捷键、光标定位、不抢焦点的浮窗和跨应用粘贴都需要目标操作系统的实现。做第一个跨平台原型时，先用文件或麦克风送入 PCM 并显示增量文本，就可以独立验证协议，再接桌面交互。
 
-[source/Tests](Tests) 有录音生命周期、缓冲区、光标定位、上下文和粘贴相关检查。例如，在 Mac 上进入仓库根目录后，可运行 `bash Tests/check_audio_lifecycle.sh` 检查设备启动、取消、超时和音频收尾。
+[Tests](Tests) 有录音生命周期、缓冲区、光标定位、上下文和粘贴相关检查。例如，在 Mac 上进入仓库根目录后，可运行 `bash Tests/check_audio_lifecycle.sh` 检查设备启动、取消、超时和音频收尾。

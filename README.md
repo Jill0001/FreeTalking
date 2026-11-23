@@ -1,17 +1,28 @@
-# FreeTalking
+<p align="center"><img src="Ramblr/Assets.xcassets/AppIcon.appiconset/FreeTalking-128@2x.png" width="96" height="96" alt="FreeTalking"></p>
+<h1 align="center">FreeTalking</h1>
+<p align="center">Live dictation from your Mac menu bar.</p>
+<p align="center"><a href="https://github.com/Jill0001/FreeTalking/releases/latest"><strong>Download for Apple Silicon</strong></a> · <a href="README.zh-CN.md">中文说明</a></p>
 
-FreeTalking is a macOS menu bar app for live dictation, based on [Ramblr](https://github.com/nfarina/ramblr). Audio streams to OpenAI as you speak. A floating transcript wraps near the cursor and keeps earlier lines available for review.
+Tap **Right Command** and start speaking. A floating transcript grows near the cursor as words arrive from OpenAI. Tap again to copy the finished text or paste it directly into the app where you started.
 
-[Download FreeTalking for Apple Silicon](https://github.com/Jill0001/FreeTalking/releases/latest) · [中文使用与设计说明](README.zh-CN.md)
+<img src="docs/media/live-dictation.gif" width="520" alt="Live transcript wrapping onto a second line as the speaker switches between Mandarin and English.">
 
-The DMG runs on Apple Silicon Macs with macOS 15.2 or later. Drag FreeTalking to Applications. This release is locally signed and has not been notarized. If macOS reports an unidentified developer on first launch, see [Apple’s instructions for opening a trusted app](https://support.apple.com/en-us/102445).
+This replay uses the actual updates from one session with synthesized Mandarin and English speech. Mandarin, English and switching between them are what we use most. Recognition has worked well in everyday use with these languages. Other languages have had less testing, and the app currently sends Chinese and English language hints.
+
+## Install
+
+Download the DMG for **Apple Silicon · macOS 15.2 or later**, drag FreeTalking into Applications and open it.
+
+**First launch:** The release is locally signed and has not been notarized by Apple. If macOS says it cannot verify the developer, and you trust the copy you downloaded, go to **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. Confirm **Open** for FreeTalking. [Apple’s illustrated guide](https://support.apple.com/en-us/102445)
 
 ## First dictation
 
 1. Launch FreeTalking and click the microphone in the menu bar. Open the gear and select **Dictation**. Enter your OpenAI API key and click **Save Key**. Allow microphone access when prompted.
 2. Press and release **Right Command** to start recording. Press it again to finish. Press **Esc** during recording to discard. Recording stops automatically at three minutes.
 3. The live session finishes the last words and sends its final text to the clipboard. To paste automatically, enable **Auto-paste into active app** under **Output** and grant Accessibility permission.
-4. Open **Recent dictations** from the menu bar. Click a result to copy it. For new results, the waveform and document buttons reveal the available WAV recording and saved TXT transcript in Finder.
+4. Click the menu bar microphone to see your ten most recent dictations. Click a result to copy it. For new results, the waveform and document buttons reveal the available WAV recording and saved TXT transcript in Finder.
+
+<img src="docs/media/recent-dictations.png" width="340" alt="Recent dictations menu with three sample transcripts and a Copy button beside each one.">
 
 ## Settings
 
@@ -64,4 +75,4 @@ CoreAudio or driver-specific hangs.
 
 ## License
 
-MIT License — see `LICENSE.txt`
+FreeTalking is based on [Ramblr](https://github.com/nfarina/ramblr) by Nick Farina. See the [MIT license](LICENSE.txt).
